@@ -200,6 +200,48 @@ Error seen: `pytest : The term 'pytest' is not recognized...`. Cause: the venv w
 
 `https://the-internet.herokuapp.com/login` — a public site built specifically for Selenium practice. Known test credentials: `tomsmith` / `SuperSecretPassword!`. Also explored `/secure` (post-login page) and `/logout`.
 
+## Putting the Project on GitHub
+
+Took the project from a plain local folder to a public GitHub repo — not a Selenium concept itself, but a standard part of having a presentable, version-controlled portfolio project.
+
+**`.gitignore` — root-level, not buried in subfolders.** Both `venv/` (auto-created by `python -m venv`) and `.pytest_cache/` (auto-created by pytest) come with their own internal `.gitignore` containing just `*`. These work, but are fragile/non-standard — the better approach is **one `.gitignore` at the project root** listing everything to exclude:
+```
+venv/
+__pycache__/
+.pytest_cache/
+```
+(`__pycache__/` — Python's compiled bytecode cache — is the same category: auto-generated, machine-specific, safe to exclude.)
+
+**`requirements.txt` encoding gotcha.** Running `pip freeze > requirements.txt` in PowerShell saved the file as **UTF-16LE** (confirmed via the `file` command) instead of plain UTF-8 — a quirk of PowerShell's `>` redirection. This can break `pip install -r requirements.txt` for anyone else using the file. Fix: force UTF-8 explicitly:
+```powershell
+pip freeze | Out-File -Encoding utf8 requirements.txt
+```
+This was also a good moment to catch that the file was stale — it didn't list `pytest` (and its dependencies like `pluggy`, `iniconfig`, `packaging`) even though pytest had been in use for a while, since it was generated before pytest was installed.
+
+**`README.md`** — added to explain what the project demonstrates, its file structure, and setup/run instructions, so it's legible to someone (recruiter or otherwise) landing on the repo without prior context. Decided to keep `SELENIUM_LEARNING_LOG.md` in the repo too, since this is explicitly framed as a learning project — the log itself is a reasonable signal of a deliberate, structured learning process.
+
+**Git workflow used:**
+```
+git init
+git add .gitignore README.md SELENIUM_LEARNING_LOG.md conftest.py requirements.txt test_login.py test_setup.py
+git commit -m "Initial commit: Selenium learning project setup"
+```
+Naming files explicitly in `git add` (rather than `git add .`) is a good habit — it forces a glance at exactly what's being staged each time.
+
+**Windows case-sensitivity gotcha**: `git add readme.md` initially failed to match, because the actual file is `README.md` — Windows' filesystem is case-insensitive (so Explorer treats them as "the same"), but `git add` can fail to resolve a mismatched-case pathspec depending on git's config. Lesson: run `git status` first and copy-paste exact filenames from its output rather than retyping them from memory.
+
+**Connecting to GitHub and pushing:**
+```
+git remote add origin https://github.com/<username>/<repo>.git
+git branch -M main
+git push -u origin main
+```
+- `remote add origin` — tells the local repo where "GitHub" is.
+- `branch -M main` — renames the default branch from `master` to `main` (GitHub's modern convention).
+- `push -u origin main` — uploads commits and sets `main` to track `origin/main`, so future pushes only need `git push`.
+
+Repo created empty on GitHub first (no auto-generated README/`.gitignore` from GitHub's UI, to avoid a conflict with the ones already committed locally).
+
 ## Up Next (not yet covered)
 
 - Multi-window/tab handling (`driver.window_handles`, `driver.switch_to.window(...)`) — relevant once a click opens a new tab (e.g. external links).
