@@ -242,10 +242,86 @@ git push -u origin main
 
 Repo created empty on GitHub first (no auto-generated README/`.gitignore` from GitHub's UI, to avoid a conflict with the ones already committed locally).
 
+## Headless Mode
+
+Headless = Chrome runs with no visible window/rendering — necessary for CI runners, which have no display, and also useful locally for faster/background runs.
+
+```python
+from selenium.webdriver.chrome.options import Options
+
+options = Options()
+options.add_argument("--headless=new")
+d = webdriver.Chrome(options=options)
+```
+
+Made this **conditional** in the `driver` fixture so local runs stay visible (useful for watching/debugging) while CI runs go headless automatically, by checking an environment variable GitHub Actions sets on every run (`CI=true`):
+
+```python
+# conftest.py
+import os
+from selenium.webdriver.chrome.options import Options
+
+options = Options()
+if os.environ.get("CI") == "true":
+    options.add_argument("--headless=new")
+
+@pytest.fixture
+def driver():
+    d = webdriver.Chrome(options=options)
+    yield d
+    d.quit()
+```
+
+**Bug hit while building this**: initially added `options.add_argument("--headless=new")` both unconditionally *and* inside the `if os.environ.get("CI") == "true":` block. Since the unconditional line ran every time regardless, it silently defeated the whole point of the conditional — headless was always on, even locally, so the visible browser window stopped appearing at all. Fix: delete the unconditional line, keep only the one inside the `if`. Lesson: a duplicate/redundant line doesn't just do nothing extra — if it's *unconditional* while a nearby conditional does the "same" thing, the conditional becomes dead code.
+
+## CI/CD with GitHub Actions
+
+**CI (Continuous Integration)**: automatically run the test suite on a clean, temporary machine whenever code is pushed (or a PR opened) — catches "works on my machine" issues and gives an automatic pass/fail signal, rather than relying on remembering to run `pytest` locally. **CD (Continuous Deployment)** is the next step after CI — automatically shipping something once tests pass; not relevant for this project since nothing gets deployed, so CI alone was the goal here.
+
+Configured entirely via one YAML file committed into the repo: `.github/workflows/tests.yml`. GitHub auto-discovers anything in that folder — no external service or account setup needed beyond already being on GitHub.
+
+```yaml
+name: Selenium Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest test_login.py -v
+```
+
+Key concepts:
+- **`on:`** — triggers. Here: any push to `main`, or any PR targeting `main`.
+- **`runs-on: ubuntu-latest`** — a fresh, temporary Linux VM GitHub spins up just for this run and destroys afterward. This is *why* headless mode is mandatory in CI — this machine has no display.
+- **`uses:` vs `run:`** — `uses:` invokes a pre-built, reusable GitHub Action (e.g. `actions/checkout@v4` clones the repo onto the runner; without it, the runner is an empty VM with no code to test). `run:` executes a raw shell command directly — the same commands you'd type locally (`pip install -r requirements.txt`, `pytest ...`).
+- **Matched the Python version to local** (3.14) rather than an arbitrary pin, so CI environment mirrors the real dev environment as closely as possible.
+- **No manual Chrome/ChromeDriver install step needed** — `ubuntu-latest` runners come with Chrome pre-installed, and Selenium Manager auto-resolves the matching driver, same as locally.
+
+**Result**: pushed the workflow, GitHub Actions triggered automatically on the push, and the full suite ran and passed in ~34 seconds (checked via `https://github.com/<user>/<repo>/actions`, and via the GitHub API — `GET /repos/<user>/<repo>/actions/runs` — to poll run status/conclusion programmatically). Every future push or PR to `main` now gets this same automatic pass/fail signal.
+
 ## Up Next (not yet covered)
 
 - Multi-window/tab handling (`driver.window_handles`, `driver.switch_to.window(...)`) — relevant once a click opens a new tab (e.g. external links).
-- Headless mode (running without a visible browser window).
 - More complex multi-page navigation flows.
 - Additional assertions: `driver.current_url`, flash message CSS class (`success` vs `error`) via `get_attribute("class")`, page title, password field `type` attribute.
 - New practice pages on the-internet.herokuapp.com (dropdowns, checkboxes, dynamic loading, JS alerts, file upload) for fresh locator/interaction challenges.
+- CI enhancements: running on pull requests before merge, adding a status badge to `README.md`, testing across multiple Python versions (a build matrix).
