@@ -1,4 +1,5 @@
 # Selenium Learning Project
+![Selenium Tests](https://github.com/dsmitty52/selenium-learning-project/actions/workflows/tests.yml/badge.svg)
 
 A hands-on project for learning Selenium WebDriver and pytest from scratch, with no prior professional test-automation experience. Built incrementally, one concept at a time, against a public practice site.
 
