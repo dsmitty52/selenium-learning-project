@@ -30,19 +30,36 @@ def attempt_logout(driver, username,password):
 def test_successful_login(driver):
     message = attempt_login(driver, "tomsmith", "SuperSecretPassword!")  # valid credentials
     assert "You logged into a secure area!" in message  # check for successful login message
+    assert driver.current_url == "https://the-internet.herokuapp.com/secure" # check for correct URL after login
+    flash = driver.find_element(By.ID, "flash")  
+    assert "success" in flash.get_attribute("class")   # check for success class in flash message
+    assert driver.title == "The Internet"
 
 def test_wrong_password(driver):
     message = attempt_login(driver, "tomsmith", "WrongPassword!")  # invalid password
     assert "Your password is invalid!" in message  # check for invalid password message
+    flash = driver.find_element(By.ID, "flash")  
+    assert "error" in flash.get_attribute("class")   # check for error class in flash message
 
 def test_wrong_username(driver):
     message = attempt_login(driver, "wronguser", "SuperSecretPassword!")  # invalid username
     assert "Your username is invalid!" in message  # check for invalid username message
+    flash = driver.find_element(By.ID, "flash")  
+    assert "error" in flash.get_attribute("class")   # check for error class in flash message
 
 def test_empty_credentials(driver):
     message = attempt_login(driver, "", "")  # empty credentials
     assert "Your username is invalid!" in message  # check for invalid username message
+    flash = driver.find_element(By.ID, "flash")  
+    assert "error" in flash.get_attribute("class")   # check for error class in flash message
 
 def test_successful_logout(driver):
     message = attempt_logout(driver, "tomsmith", "SuperSecretPassword!")  # valid credentials
     assert "You logged out of the secure area!" in message  # check for successful logout message
+    flash = driver.find_element(By.ID, "flash")  
+    assert "success" in flash.get_attribute("class")   # check for success class in flash message
+
+def test_password_masking(driver):
+   driver.get("https://the-internet.herokuapp.com/login")
+   password_field=driver.find_element(By.ID,"password")
+   assert password_field.get_attribute("type")=="password"  # check that the password field is of type 'password' (masked)
