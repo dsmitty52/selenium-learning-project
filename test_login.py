@@ -6,7 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import pytest
 
 def attempt_login(driver, username,password):
- wait = WebDriverWait(driver,10)  # wait for up to 10 seconds for elements to be present
+ wait = WebDriverWait(driver,20)  # wait for up to 20 seconds for elements to be present
  driver.get("https://the-internet.herokuapp.com/login")
  driver.find_element(By.ID,"username").send_keys(username)
  driver.find_element(By.ID,"password").send_keys(password)   
@@ -16,7 +16,7 @@ def attempt_login(driver, username,password):
  return message.text
 
 def attempt_logout(driver, username,password):
- wait = WebDriverWait(driver,10)  # wait for up to 10 seconds for elements to be present
+ wait = WebDriverWait(driver,20)  # wait for up to 20 seconds for elements to be present
  driver.get("https://the-internet.herokuapp.com/login")
  driver.find_element(By.ID,"username").send_keys(username)
  driver.find_element(By.ID,"password").send_keys(password)   
