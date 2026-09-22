@@ -24,6 +24,7 @@ def attempt_logout(driver, username,password):
  logout_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='/logout']")))
  logout_button.click()
 
+ wait.until(EC.url_contains("/login"))   # confirm navigation actually happened first
  message = wait.until(EC.visibility_of_element_located((By.ID, "flash"))) 
  return message.text
 
