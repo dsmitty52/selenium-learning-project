@@ -318,10 +318,62 @@ Key concepts:
 
 **Result**: pushed the workflow, GitHub Actions triggered automatically on the push, and the full suite ran and passed in ~34 seconds (checked via `https://github.com/<user>/<repo>/actions`, and via the GitHub API — `GET /repos/<user>/<repo>/actions/runs` — to poll run status/conclusion programmatically). Every future push or PR to `main` now gets this same automatic pass/fail signal.
 
+## Richer Assertions
+
+Extended the existing tests to check more than just flash-message text, since text alone can pass even when something subtly wrong happened with app state:
+- **`driver.current_url`** — verifies actual navigation/state, not just what's printed on screen.
+- **Flash message CSS class** (`flash success` vs `flash error`, via `driver.find_element(By.ID, "flash").get_attribute("class")`) — more robust than matching exact wording, since copy can change without meaning behavior changed.
+- **`driver.title`** — simple baseline sanity check.
+- **Password field masking** — a new standalone test (`test_password_field_is_masked`) checking `password_field.get_attribute("type") == "password"`. Different from the others because it has to run *before* submitting the form (the password field only exists on the login page), so it doesn't reuse `attempt_login` at all — just navigates and checks directly.
+
+Key enabler: these all work by using the `driver` fixture parameter directly inside the test function, *after* calling a helper like `attempt_login`. This works because `driver` stays alive for the whole test — the fixture's `d.quit()` teardown only runs after the test function fully returns — so the test can keep querying the live page even though the helper function already returned.
+
+## The Pull Request (PR) Workflow
+
+Practiced the standard professional git workflow: never commit directly to `main` for a "real" change — branch, change, push, open a PR, let CI gate it, merge.
+
+```
+git checkout -b add-ci-badge
+# ... make changes ...
+git add README.md
+git commit -m "Add CI status badge to README"
+git push -u origin add-ci-badge          # -u needed: first push of a *new* branch name
+# open PR on GitHub (base: main, compare: add-ci-badge)
+# CI runs automatically via the workflow's existing `pull_request:` trigger
+# merge once checks pass
+git checkout main
+git pull                                  # sync local main with the merge that happened on GitHub
+git branch -d add-ci-badge                # optional cleanup of the now-merged local branch
+```
+
+Added a live CI status badge to `README.md` as the practice change for this PR:
+```markdown
+![Selenium Tests](https://github.com/<user>/<repo>/actions/workflows/tests.yml/badge.svg)
+```
+This is a GitHub-hosted image URL that always reflects the latest workflow run's pass/fail state.
+
+## Debugging a Real Flaky CI Failure (External-Site Timeout)
+
+While the PR's CI check ran, `test_successful_logout` failed intermittently on GitHub Actions (headless/CI) despite passing locally — a genuinely realistic bug-hunting scenario, not a contrived exercise.
+
+**First failure mode**: `AssertionError` — got the *login* success message ("You logged into a secure area!") instead of the *logout* one. Root cause: right after clicking the logout link, the *old* page's `#flash` element (from the login step) was still visible for a brief moment before navigation completed. `wait.until(EC.visibility_of_element_located((By.ID, "flash")))` doesn't know it's supposed to wait for a *new* page — it just checks "is a `#flash` visible right now," and the stale one already was. **Fix**: wait for the URL to actually change first, before checking the flash text:
+```python
+logout_button.click()
+wait.until(EC.url_contains("/login"))   # confirm navigation actually happened first
+message = wait.until(EC.visibility_of_element_located((By.ID, "flash")))
+```
+
+**Second failure mode**: after that fix, the same test later failed again on a different CI run — this time a `TimeoutException` raised directly from `wait.until(EC.url_contains("/login"))` itself, meaning the URL simply hadn't changed within the 10-second window. Diagnosed via the actual traceback (pulled from the GitHub Actions run logs) plus a strong secondary clue: that run's total suite time was **32.65s**, vs. **9.38s** on a clean passing run — evidence of genuine external slowness that run, not a logic bug. `the-internet.herokuapp.com` runs on Heroku's free tier, which is known to sleep idle apps and respond slowly on wake-up.
+
+**Fix**: widen the wait timeout from `10` to `20` seconds in both `attempt_login` and `attempt_logout` (`WebDriverWait(driver, 20)`). This costs nothing on fast runs — `wait.until(...)` returns the instant its condition is true — it just raises the ceiling before giving up, as insurance against real-world external-service slowness.
+
+**Lesson**: tests that depend on a real external service you don't control are inherently less reliable than tests against code/infrastructure you own. This is a well-known, accepted tradeoff in real-world test automation, not a sign of a broken test suite — the professional response is generous timeouts and tolerance for occasional retries, not assuming every failure is a logic bug.
+
 ## Up Next (not yet covered)
 
 - Multi-window/tab handling (`driver.window_handles`, `driver.switch_to.window(...)`) — relevant once a click opens a new tab (e.g. external links).
 - More complex multi-page navigation flows.
-- Additional assertions: `driver.current_url`, flash message CSS class (`success` vs `error`) via `get_attribute("class")`, page title, password field `type` attribute.
-- New practice pages on the-internet.herokuapp.com (dropdowns, checkboxes, dynamic loading, JS alerts, file upload) for fresh locator/interaction challenges.
-- CI enhancements: running on pull requests before merge, adding a status badge to `README.md`, testing across multiple Python versions (a build matrix).
+- New practice pages on the-internet.herokuapp.com (dropdowns, checkboxes, dynamic loading, JS alerts, file upload) for fresh locator/interaction challenges — dynamic loading especially, since it's a good case for waiting on an element that doesn't exist yet at all, vs. one that's just not visible/clickable yet.
+- `pytest.mark.parametrize` — a cleaner way to express the 3 login-variant tests (`test_wrong_password`, `test_wrong_username`, `test_empty_credentials`) as one parameterized test instead of near-duplicate functions.
+- Page Object Model (POM) — a standard pattern for structuring larger Selenium test suites (separating "how to find/interact with a page's elements" from "what the test asserts"), relevant once the suite grows beyond one page.
+- CI enhancements: testing across multiple Python versions (a build matrix).
